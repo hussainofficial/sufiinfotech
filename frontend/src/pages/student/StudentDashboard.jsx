@@ -61,25 +61,30 @@ export default function StudentDashboard() {
       <section>
         <h2 className="font-semibold text-slate-900 mb-3">Fees</h2>
         <div className="bg-white border border-slate-200 rounded-lg divide-y divide-slate-100">
-          {fees.map((f) => (
-            <div key={f.id} className="px-4 py-3 flex justify-between items-center text-sm">
-              <span>{f.course_title} &middot; Due {f.due_date?.slice(0, 10)}</span>
-              <div className="flex items-center gap-3">
-                <span className={f.status === 'paid' ? 'text-green-600' : 'text-amber-600'}>
-                  ₹{f.amount} — {f.status}
-                </span>
-                {f.status !== 'paid' && (
-                  <button
-                    onClick={() => handlePay(f)}
-                    disabled={payingId === f.id}
-                    className="bg-slate-900 text-white rounded-md px-3 py-1.5 text-xs hover:bg-slate-800 disabled:opacity-50"
-                  >
-                    {payingId === f.id ? 'Processing...' : 'Pay Now'}
-                  </button>
-                )}
+          {fees.map((f) => {
+            const balance = Number(f.amount) - Number(f.paid_amount || 0);
+            return (
+              <div key={f.id} className="px-4 py-3 flex justify-between items-center text-sm">
+                <span>{f.course_title} &middot; Due {f.due_date?.slice(0, 10)}</span>
+                <div className="flex items-center gap-3">
+                  <span className={f.status === 'paid' ? 'text-green-600' : 'text-amber-600'}>
+                    {f.status !== 'paid' && Number(f.paid_amount) > 0
+                      ? `₹${balance.toFixed(2)} due (₹${Number(f.paid_amount).toFixed(2)} paid) — ${f.status}`
+                      : `₹${f.amount} — ${f.status}`}
+                  </span>
+                  {f.status !== 'paid' && (
+                    <button
+                      onClick={() => handlePay(f)}
+                      disabled={payingId === f.id}
+                      className="bg-slate-900 text-white rounded-md px-3 py-1.5 text-xs hover:bg-slate-800 disabled:opacity-50"
+                    >
+                      {payingId === f.id ? 'Processing...' : 'Pay Now'}
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
           {fees.length === 0 && <p className="px-4 py-4 text-sm text-slate-400">No fee records yet</p>}
         </div>
         {pendingFees.length > 0 && (
@@ -92,6 +97,7 @@ export default function StudentDashboard() {
         <div className="bg-white border border-slate-200 rounded-lg divide-y divide-slate-100">
           {exams.map((e) => {
             const isOpen = new Date(e.scheduled_at) <= new Date();
+            const canStart = isOpen && e.fees_cleared;
             return (
               <div key={e.id} className="px-4 py-3 flex justify-between items-center text-sm">
                 <div>
@@ -102,8 +108,11 @@ export default function StudentDashboard() {
                   {!isOpen && (
                     <p className="text-xs text-amber-600 mt-0.5">Opens {new Date(e.scheduled_at).toLocaleString()}</p>
                   )}
+                  {isOpen && !e.fees_cleared && (
+                    <p className="text-xs text-red-600 mt-0.5">Clear your pending course fees to unlock this exam</p>
+                  )}
                 </div>
-                {isOpen ? (
+                {canStart ? (
                   <Link to={`/student/exams/${e.id}`} className="text-slate-900 underline shrink-0">Start</Link>
                 ) : (
                   <span className="text-xs text-slate-400 shrink-0">Not started</span>

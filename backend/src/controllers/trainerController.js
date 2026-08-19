@@ -13,13 +13,17 @@ async function listTrainers(req, res) {
 }
 
 async function createTrainer(req, res) {
-  const { name, email, phone, specialization } = req.body;
+  const { name, email, phone, specialization, password } = req.body;
   if (!name || !email) {
     return res.status(400).json({ error: 'name and email are required' });
   }
+  if (password && password.length < 6) {
+    return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  }
 
-  const tempPassword = generateTempPassword();
-  const passwordHash = await bcrypt.hash(tempPassword, 10);
+  const isCustomPassword = !!password;
+  const loginPassword = isCustomPassword ? password : generateTempPassword();
+  const passwordHash = await bcrypt.hash(loginPassword, 10);
 
   const [result] = await pool.query(
     'INSERT INTO trainers (name, email, phone, password_hash, specialization) VALUES (?, ?, ?, ?, ?)',
@@ -32,10 +36,10 @@ async function createTrainer(req, res) {
     type: 'general',
     html: `<p>Hi ${name},</p>
            <p>A trainer account has been created for you at Sufi Infotech.</p>
-           <p>Email: ${email}<br/>Temporary Password: <b>${tempPassword}</b></p>`,
+           <p>Email: ${email}<br/>${isCustomPassword ? 'Password' : 'Temporary Password'}: <b>${loginPassword}</b></p>`,
   }).catch(() => {});
 
-  res.status(201).json({ id: result.insertId, tempPassword });
+  res.status(201).json({ id: result.insertId, tempPassword: loginPassword });
 }
 
 module.exports = { listTrainers, createTrainer };

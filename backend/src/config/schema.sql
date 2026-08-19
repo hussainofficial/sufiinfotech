@@ -237,6 +237,7 @@ CREATE TABLE fee_installments (
   id INT AUTO_INCREMENT PRIMARY KEY,
   fee_plan_id INT NOT NULL,
   amount DECIMAL(10,2) NOT NULL,
+  paid_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
   due_date DATE NOT NULL,
   status ENUM('pending', 'paid', 'overdue') DEFAULT 'pending',
   reminder_sent_at TIMESTAMP NULL,

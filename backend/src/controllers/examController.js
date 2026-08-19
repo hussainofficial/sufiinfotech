@@ -182,18 +182,33 @@ async function listAssignments(req, res) {
   res.json(rows);
 }
 
-// Student-facing: exams assigned to them, with their unlock time.
+// Student-facing: exams assigned to them, with their unlock time and whether course fees are clear.
 async function listAvailableExams(req, res) {
   const studentId = req.user.id;
   const [rows] = await pool.query(
-    `SELECT e.id, e.title, e.duration_minutes, e.total_marks, e.pass_marks, e.negative_marks, ea.scheduled_at
+    `SELECT e.id, e.course_id, e.title, e.duration_minutes, e.total_marks, e.pass_marks, e.negative_marks, ea.scheduled_at
      FROM exam_assignments ea
      JOIN exams e ON e.id = ea.exam_id
      WHERE ea.student_id = ? AND e.is_published = TRUE
      ORDER BY ea.scheduled_at`,
     [studentId]
   );
+  for (const row of rows) {
+    row.fees_cleared = !(await hasPendingFees(studentId, row.course_id));
+  }
   res.json(rows);
+}
+
+// True if the student has any unpaid (pending/overdue) fee installment for the given course.
+// A student with no fee plan at all for the course is treated as unrestricted.
+async function hasPendingFees(studentId, courseId) {
+  const [[row]] = await pool.query(
+    `SELECT COUNT(*) AS pending FROM fee_installments fi
+     JOIN fee_plans fp ON fp.id = fi.fee_plan_id
+     WHERE fp.student_id = ? AND fp.course_id = ? AND fi.status != 'paid'`,
+    [studentId, courseId]
+  );
+  return row.pending > 0;
 }
 
 // Starts an attempt and returns the questions WITHOUT the correct answer.
@@ -209,6 +224,12 @@ async function startAttempt(req, res) {
   if (!assignment) return res.status(403).json({ error: 'This exam is not assigned to you' });
   if (new Date(assignment.scheduled_at) > new Date()) {
     return res.status(403).json({ error: 'This exam has not started yet', scheduled_at: assignment.scheduled_at });
+  }
+
+  const [examCourseRows] = await pool.query('SELECT course_id FROM exams WHERE id = ?', [exam_id]);
+  if (!examCourseRows[0]) return res.status(404).json({ error: 'Exam not found' });
+  if (await hasPendingFees(studentId, examCourseRows[0].course_id)) {
+    return res.status(403).json({ error: 'Please clear your pending course fees before attempting this exam.' });
   }
 
   const [existing] = await pool.query(

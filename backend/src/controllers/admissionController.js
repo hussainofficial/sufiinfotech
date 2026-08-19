@@ -13,11 +13,14 @@ function generateTempPassword() {
 async function createAdmission(req, res) {
   const {
     enquiry_id, name, email, phone, dob, address,
-    batch_id, installments,
+    batch_id, installments, password,
   } = req.body;
 
   if (!name || !email || !phone || !batch_id) {
     return res.status(400).json({ error: 'name, email, phone and batch_id are required' });
+  }
+  if (password && password.length < 6) {
+    return res.status(400).json({ error: 'Password must be at least 6 characters' });
   }
 
   const [batchRows] = await pool.query(
@@ -31,8 +34,9 @@ async function createAdmission(req, res) {
     return res.status(400).json({ error: 'Batch is full' });
   }
 
-  const tempPassword = generateTempPassword();
-  const passwordHash = await bcrypt.hash(tempPassword, 10);
+  const isCustomPassword = !!password;
+  const loginPassword = isCustomPassword ? password : generateTempPassword();
+  const passwordHash = await bcrypt.hash(loginPassword, 10);
 
   const conn = await pool.getConnection();
   try {
@@ -82,11 +86,11 @@ async function createAdmission(req, res) {
       html: `<p>Hi ${name},</p>
              <p>Your admission to <b>${batch.name}</b> is confirmed.</p>
              <p>Your student portal login:</p>
-             <p>Email: ${email}<br/>Temporary Password: <b>${tempPassword}</b></p>
-             <p>Please log in and change your password.</p>`,
+             <p>Email: ${email}<br/>${isCustomPassword ? 'Password' : 'Temporary Password'}: <b>${loginPassword}</b></p>
+             ${isCustomPassword ? '' : '<p>Please log in and change your password.</p>'}`,
     }).catch(() => {});
 
-    res.status(201).json({ studentId, message: 'Admission created', tempPassword });
+    res.status(201).json({ studentId, message: 'Admission created', tempPassword: loginPassword });
   } catch (err) {
     await conn.rollback();
     throw err;

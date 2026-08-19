@@ -9,7 +9,7 @@ function getRazorpayClient() {
   });
 }
 
-// Creates a Razorpay order for a fee installment the logged-in student owns.
+// Creates a Razorpay order for the remaining balance on a fee installment the logged-in student owns.
 async function createOrder(req, res) {
   const studentId = req.user.id;
   const { installment_id } = req.body;
@@ -24,9 +24,11 @@ async function createOrder(req, res) {
   if (!installment) return res.status(404).json({ error: 'Installment not found' });
   if (installment.status === 'paid') return res.status(400).json({ error: 'Already paid' });
 
+  const balance = Number(installment.amount) - Number(installment.paid_amount);
+
   const razorpay = getRazorpayClient();
   const order = await razorpay.orders.create({
-    amount: Math.round(installment.amount * 100), // paise
+    amount: Math.round(balance * 100), // paise
     currency: 'INR',
     receipt: `installment_${installment.id}`,
   });
@@ -39,7 +41,7 @@ async function createOrder(req, res) {
   });
 }
 
-// Verifies the Razorpay signature and marks the installment paid.
+// Verifies the Razorpay signature and clears the remaining balance on the installment.
 async function verifyPayment(req, res) {
   const studentId = req.user.id;
   const { installment_id, razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
@@ -62,11 +64,16 @@ async function verifyPayment(req, res) {
   const installment = rows[0];
   if (!installment) return res.status(404).json({ error: 'Installment not found' });
 
-  await pool.query("UPDATE fee_installments SET status = 'paid' WHERE id = ?", [installment_id]);
+  const balance = Number(installment.amount) - Number(installment.paid_amount);
+
+  await pool.query(
+    "UPDATE fee_installments SET paid_amount = amount, status = 'paid' WHERE id = ?",
+    [installment_id]
+  );
   await pool.query(
     `INSERT INTO payments (fee_installment_id, amount, payment_method, razorpay_order_id, razorpay_payment_id, status, receipt_no)
      VALUES (?, ?, 'online', ?, ?, 'success', ?)`,
-    [installment_id, installment.amount, razorpay_order_id, razorpay_payment_id, `RCPT-${Date.now()}`]
+    [installment_id, balance, razorpay_order_id, razorpay_payment_id, `RCPT-${Date.now()}`]
   );
 
   res.json({ message: 'Payment verified and recorded' });

@@ -5,7 +5,7 @@ export default function AdminAdmissions() {
   const [enquiries, setEnquiries] = useState([]);
   const [batches, setBatches] = useState([]);
   const [form, setForm] = useState({
-    enquiry_id: '', name: '', email: '', phone: '', dob: '', address: '', batch_id: '', installments: 1,
+    enquiry_id: '', name: '', email: '', phone: '', dob: '', address: '', batch_id: '', installments: 1, password: '',
   });
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
@@ -33,7 +33,7 @@ export default function AdminAdmissions() {
     try {
       const res = await client.post('/admissions', form);
       setResult(res.data);
-      setForm({ enquiry_id: '', name: '', email: '', phone: '', dob: '', address: '', batch_id: '', installments: 1 });
+      setForm({ enquiry_id: '', name: '', email: '', phone: '', dob: '', address: '', batch_id: '', installments: 1, password: '' });
       load();
     } catch (err) {
       setError(err.response?.data?.error || 'Could not create admission');
@@ -81,6 +81,12 @@ export default function AdminAdmissions() {
             <option key={b.id} value={b.id}>{b.name} ({b.course_title}) — {b.seats_filled}/{b.seats_total} seats</option>
           ))}
         </select>
+        <div>
+          <input type="text" placeholder="Set student login password (optional)" value={form.password}
+            onChange={(e) => setForm({ ...form, password: e.target.value })}
+            className="w-full border border-slate-300 rounded-md px-3 py-2 text-sm" />
+          <p className="text-xs text-slate-400 mt-1">Leave blank to auto-generate a random password (emailed to the student either way).</p>
+        </div>
 
         <button className="bg-slate-900 text-white rounded-md py-2 px-4 text-sm hover:bg-slate-800">
           Create Admission
@@ -90,7 +96,7 @@ export default function AdminAdmissions() {
       {result && (
         <div className="mt-4 bg-green-50 border border-green-200 rounded-lg p-4 text-sm max-w-lg">
           <p className="text-green-700">Admission created. Login credentials emailed to the student.</p>
-          <p className="text-slate-600 mt-1">Temporary password (backup): <b>{result.tempPassword}</b></p>
+          <p className="text-slate-600 mt-1">Password (backup): <b>{result.tempPassword}</b></p>
         </div>
       )}
       {error && <p className="text-red-600 text-sm mt-3">{error}</p>}
