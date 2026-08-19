@@ -22,7 +22,12 @@ const { scheduleFeeReminders } = require('./jobs/feeReminder');
 
 const app = express();
 
-app.use(cors({ origin: process.env.FRONTEND_URL || '*' }));
+// FRONTEND_URL can be a comma-separated list, so the same backend can serve
+// both the Vercel preview/production domain and a custom domain at once.
+const allowedOrigins = (process.env.FRONTEND_URL || '*').split(',').map((o) => o.trim());
+app.use(cors({
+  origin: allowedOrigins.includes('*') ? '*' : allowedOrigins,
+}));
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 

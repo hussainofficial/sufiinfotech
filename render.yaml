@@ -38,7 +38,7 @@ services:
       - key: SMTP_FROM
         sync: false
       - key: FRONTEND_URL
-        value: https://sufiinfotech.in
+        value: https://sufiinfotech.vercel.app,https://sufiinfotech.in
       - key: RAZORPAY_KEY_ID
         sync: false
       - key: RAZORPAY_KEY_SECRET
