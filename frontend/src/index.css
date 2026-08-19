@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+}
+
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+.blink-cursor {
+  animation: blink 1s steps(1) infinite;
+}
+
+@keyframes dot-drift {
+  from { background-position: 0 0; }
+  to { background-position: 40px 40px; }
+}
+.dot-grid {
+  background-image: radial-gradient(currentColor 1.5px, transparent 1.5px);
+  background-size: 22px 22px;
+  animation: dot-drift 6s linear infinite;
+}
