@@ -11,6 +11,7 @@ export default function ExamAttempt() {
   const [answers, setAnswers] = useState({});
   const [secondsLeft, setSecondsLeft] = useState(null);
   const [submitted, setSubmitted] = useState(null);
+  const [startError, setStartError] = useState(null);
   const submittingRef = useRef(false);
 
   useEffect(() => {
@@ -19,8 +20,22 @@ export default function ExamAttempt() {
       setExam(res.data.exam);
       setQuestions(res.data.questions);
       setSecondsLeft(res.data.exam.duration_minutes * 60);
+    }).catch((err) => {
+      setStartError(err.response?.data?.error || 'Could not start this exam.');
     });
   }, [examId]);
+
+  if (startError) {
+    return (
+      <div className="max-w-xl mx-auto mt-12 bg-white border border-slate-200 rounded-xl p-8 text-center">
+        <h1 className="text-xl font-semibold text-slate-900 mb-2">Can't Start Exam</h1>
+        <p className="text-slate-600 mb-6">{startError}</p>
+        <button onClick={() => navigate('/student/dashboard')} className="bg-slate-900 text-white rounded-md px-4 py-2 text-sm">
+          Back to Dashboard
+        </button>
+      </div>
+    );
+  }
 
   useEffect(() => {
     if (secondsLeft === null || submitted) return;
@@ -75,6 +90,12 @@ export default function ExamAttempt() {
           {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
         </span>
       </div>
+
+      {Number(exam.negative_marks) > 0 && (
+        <p className="text-xs text-rose-600 bg-rose-50 border border-rose-100 rounded-md px-3 py-2 mb-4">
+          Negative marking is active: -{exam.negative_marks} mark(s) for each wrong answer.
+        </p>
+      )}
 
       <div className="space-y-4">
         {questions.map((q, idx) => (

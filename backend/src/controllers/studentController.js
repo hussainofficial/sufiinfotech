@@ -25,6 +25,20 @@ async function listStudentsInBatch(req, res) {
   res.json(rows);
 }
 
+// All students enrolled in any batch of a given course — used to pick who an exam gets assigned to.
+async function listStudentsInCourse(req, res) {
+  const { course_id } = req.params;
+  const [rows] = await pool.query(
+    `SELECT DISTINCT s.id, s.name, s.email FROM students s
+     JOIN student_batches sb ON sb.student_id = s.id
+     JOIN batches b ON b.id = sb.batch_id
+     WHERE b.course_id = ?
+     ORDER BY s.name`,
+    [course_id]
+  );
+  res.json(rows);
+}
+
 async function setStudentActive(req, res) {
   const { id } = req.params;
   const { is_active } = req.body;
@@ -32,4 +46,4 @@ async function setStudentActive(req, res) {
   res.json({ message: 'Student updated' });
 }
 
-module.exports = { listStudents, listStudentsInBatch, setStudentActive };
+module.exports = { listStudents, listStudentsInBatch, listStudentsInCourse, setStudentActive };

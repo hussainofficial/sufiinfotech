@@ -153,9 +153,22 @@ CREATE TABLE exams (
   duration_minutes INT NOT NULL DEFAULT 30,
   total_marks INT NOT NULL DEFAULT 0,
   pass_marks INT NOT NULL DEFAULT 0,
+  negative_marks DECIMAL(4,2) NOT NULL DEFAULT 0,
   is_published BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+);
+
+-- Which student is assigned to which exam, and when it unlocks for them.
+CREATE TABLE exam_assignments (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  exam_id INT NOT NULL,
+  student_id INT NOT NULL,
+  scheduled_at DATETIME NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (exam_id) REFERENCES exams(id) ON DELETE CASCADE,
+  FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
+  UNIQUE KEY unique_assignment (exam_id, student_id)
 );
 
 CREATE TABLE questions (
@@ -201,6 +214,7 @@ CREATE TABLE certificates (
   student_id INT NOT NULL,
   course_id INT NOT NULL,
   certificate_code VARCHAR(50) NOT NULL UNIQUE,
+  grade VARCHAR(5),
   issued_date DATE DEFAULT (CURRENT_DATE),
   file_url VARCHAR(255),
   FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,

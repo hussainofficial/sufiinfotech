@@ -3,6 +3,7 @@ const path = require('path');
 const crypto = require('crypto');
 const PDFDocument = require('pdfkit');
 const pool = require('../config/db');
+const { drawCertificate, gradeForPercentage } = require('../utils/certificatePdf');
 
 const certDir = path.join(__dirname, '..', '..', 'uploads', 'certificates');
 if (!fs.existsSync(certDir)) fs.mkdirSync(certDir, { recursive: true });
@@ -23,28 +24,35 @@ async function issueCertificate(req, res) {
   const course = courseRows[0];
   if (!student || !course) return res.status(404).json({ error: 'Student or course not found' });
 
+  // Derive a grade from the student's exam performance in this course, if any.
+  const [[perf]] = await pool.query(
+    `SELECT COALESCE(SUM(ea.score), 0) AS earned, COALESCE(SUM(e.total_marks), 0) AS possible
+     FROM exam_attempts ea
+     JOIN exams e ON e.id = ea.exam_id
+     WHERE ea.student_id = ? AND e.course_id = ? AND ea.status != 'in_progress'`,
+    [student_id, course_id]
+  );
+  const percentage = perf.possible > 0 ? (perf.earned / perf.possible) * 100 : null;
+  const grade = gradeForPercentage(percentage);
+
   const code = generateCertificateCode();
   const fileName = `${code}.pdf`;
   const filePath = path.join(certDir, fileName);
+  const issuedDate = new Date();
 
-  const doc = new PDFDocument({ layout: 'landscape', size: 'A4', margin: 50 });
+  const doc = new PDFDocument({ size: 'A4', margin: 0 });
   const stream = fs.createWriteStream(filePath);
   doc.pipe(stream);
 
-  doc.rect(20, 20, doc.page.width - 40, doc.page.height - 40).lineWidth(2).stroke('#1e293b');
-  doc.fontSize(28).fillColor('#1e293b').text('Sufi Infotech', 0, 70, { align: 'center' });
-  doc.fontSize(16).fillColor('#475569').text('Certificate of Completion', { align: 'center' });
-  doc.moveDown(2);
-  doc.fontSize(14).fillColor('#334155').text('This is to certify that', { align: 'center' });
-  doc.moveDown(0.5);
-  doc.fontSize(26).fillColor('#0f172a').text(student.name, { align: 'center' });
-  doc.moveDown(0.5);
-  doc.fontSize(14).fillColor('#334155').text('has successfully completed the course', { align: 'center' });
-  doc.moveDown(0.5);
-  doc.fontSize(20).fillColor('#0f172a').text(course.title, { align: 'center' });
-  doc.moveDown(2);
-  doc.fontSize(10).fillColor('#64748b').text(`Certificate ID: ${code}`, { align: 'center' });
-  doc.text(`Issued: ${new Date().toLocaleDateString()}`, { align: 'center' });
+  drawCertificate(doc, {
+    studentName: student.name,
+    courseTitle: course.title,
+    durationWeeks: course.duration_weeks,
+    certificateCode: code,
+    enrollmentNo: `SI-STU-${String(student_id).padStart(5, '0')}`,
+    issuedDate: issuedDate.toLocaleDateString('en-GB'),
+    percentage,
+  });
 
   doc.end();
 
@@ -55,11 +63,11 @@ async function issueCertificate(req, res) {
 
   const fileUrl = `/uploads/certificates/${fileName}`;
   const [result] = await pool.query(
-    'INSERT INTO certificates (student_id, course_id, certificate_code, file_url) VALUES (?, ?, ?, ?)',
-    [student_id, course_id, code, fileUrl]
+    'INSERT INTO certificates (student_id, course_id, certificate_code, grade, issued_date, file_url) VALUES (?, ?, ?, ?, ?, ?)',
+    [student_id, course_id, code, grade, issuedDate, fileUrl]
   );
 
-  res.status(201).json({ id: result.insertId, certificate_code: code, file_url: fileUrl });
+  res.status(201).json({ id: result.insertId, certificate_code: code, grade, file_url: fileUrl });
 }
 
 async function myCertificates(req, res) {
@@ -77,7 +85,7 @@ async function myCertificates(req, res) {
 async function verifyCertificate(req, res) {
   const { code } = req.params;
   const [rows] = await pool.query(
-    `SELECT cert.certificate_code, cert.issued_date, s.name AS student_name, c.title AS course_title
+    `SELECT cert.certificate_code, cert.grade, cert.issued_date, s.name AS student_name, c.title AS course_title
      FROM certificates cert
      JOIN students s ON s.id = cert.student_id
      JOIN courses c ON c.id = cert.course_id

@@ -1,13 +1,15 @@
+const fs = require('fs');
+const ExcelJS = require('exceljs');
 const pool = require('../config/db');
 
 async function createExam(req, res) {
-  const { course_id, title, duration_minutes, pass_marks } = req.body;
+  const { course_id, title, duration_minutes, pass_marks, negative_marks } = req.body;
   if (!course_id || !title) {
     return res.status(400).json({ error: 'course_id and title are required' });
   }
   const [result] = await pool.query(
-    'INSERT INTO exams (course_id, title, duration_minutes, pass_marks) VALUES (?, ?, ?, ?)',
-    [course_id, title, duration_minutes || 30, pass_marks || 0]
+    'INSERT INTO exams (course_id, title, duration_minutes, pass_marks, negative_marks) VALUES (?, ?, ?, ?, ?)',
+    [course_id, title, duration_minutes || 30, pass_marks || 0, negative_marks || 0]
   );
   res.status(201).json({ id: result.insertId });
 }
@@ -29,6 +31,77 @@ async function addQuestion(req, res) {
     [exam_id, exam_id]
   );
   res.status(201).json({ message: 'Question added' });
+}
+
+// Bulk-adds questions from an uploaded Excel file. Expected columns (header row required):
+// question_text | option_a | option_b | option_c | option_d | correct_option | marks
+const VALID_OPTIONS = new Set(['A', 'B', 'C', 'D']);
+
+async function uploadQuestionsExcel(req, res) {
+  const { exam_id } = req.params;
+  if (!req.file) return res.status(400).json({ error: 'An Excel file is required' });
+
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.readFile(req.file.path);
+  const sheet = workbook.worksheets[0];
+  if (!sheet) return res.status(400).json({ error: 'The uploaded file has no sheets' });
+
+  const headerRow = sheet.getRow(1).values.map((v) => String(v || '').trim().toLowerCase());
+  const colIndex = (name) => headerRow.indexOf(name);
+  const idx = {
+    question_text: colIndex('question_text'),
+    option_a: colIndex('option_a'),
+    option_b: colIndex('option_b'),
+    option_c: colIndex('option_c'),
+    option_d: colIndex('option_d'),
+    correct_option: colIndex('correct_option'),
+    marks: colIndex('marks'),
+  };
+  if (Object.values(idx).slice(0, 6).some((i) => i === -1)) {
+    return res.status(400).json({
+      error: 'Missing required columns. Expected headers: question_text, option_a, option_b, option_c, option_d, correct_option, marks (optional)',
+    });
+  }
+
+  const rowsToInsert = [];
+  const errors = [];
+  sheet.eachRow((row, rowNumber) => {
+    if (rowNumber === 1) return; // header
+    const cell = (i) => String(row.values[i] ?? '').trim();
+    const question_text = cell(idx.question_text);
+    if (!question_text) return; // skip blank rows
+
+    const correct_option = cell(idx.correct_option).toUpperCase();
+    if (!VALID_OPTIONS.has(correct_option)) {
+      errors.push(`Row ${rowNumber}: correct_option must be A, B, C, or D`);
+      return;
+    }
+    const marks = idx.marks !== -1 ? (Number(cell(idx.marks)) || 1) : 1;
+
+    rowsToInsert.push([
+      exam_id, question_text, cell(idx.option_a), cell(idx.option_b),
+      cell(idx.option_c), cell(idx.option_d), correct_option, marks,
+    ]);
+  });
+
+  if (rowsToInsert.length === 0) {
+    return res.status(400).json({ error: 'No valid question rows found', details: errors });
+  }
+
+  for (const row of rowsToInsert) {
+    await pool.query(
+      `INSERT INTO questions (exam_id, question_text, option_a, option_b, option_c, option_d, correct_option, marks)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      row
+    );
+  }
+  await pool.query(
+    'UPDATE exams SET total_marks = (SELECT COALESCE(SUM(marks),0) FROM questions WHERE exam_id = ?) WHERE id = ?',
+    [exam_id, exam_id]
+  );
+
+  fs.unlink(req.file.path, () => {});
+  res.status(201).json({ inserted: rowsToInsert.length, skipped: errors.length, errors });
 }
 
 async function publishExam(req, res) {
@@ -70,16 +143,54 @@ async function deleteQuestion(req, res) {
   res.json({ message: 'Question deleted' });
 }
 
-// Student-facing: list published exams for courses they're enrolled in.
+// Assigns an exam to one or more specific students with a scheduled start time.
+// Re-assigning an already-assigned student just updates their scheduled time.
+async function assignExam(req, res) {
+  const { exam_id } = req.params;
+  const { student_ids, scheduled_at } = req.body;
+  if (!Array.isArray(student_ids) || student_ids.length === 0 || !scheduled_at) {
+    return res.status(400).json({ error: 'student_ids[] and scheduled_at are required' });
+  }
+
+  for (const studentId of student_ids) {
+    await pool.query(
+      `INSERT INTO exam_assignments (exam_id, student_id, scheduled_at) VALUES (?, ?, ?)
+       ON DUPLICATE KEY UPDATE scheduled_at = VALUES(scheduled_at)`,
+      [exam_id, studentId, scheduled_at]
+    );
+  }
+  res.status(201).json({ message: `Assigned to ${student_ids.length} student(s)` });
+}
+
+async function unassignExam(req, res) {
+  const { exam_id, student_id } = req.params;
+  await pool.query('DELETE FROM exam_assignments WHERE exam_id = ? AND student_id = ?', [exam_id, student_id]);
+  res.json({ message: 'Assignment removed' });
+}
+
+// Admin/trainer-facing: who's assigned to this exam and when it unlocks for them.
+async function listAssignments(req, res) {
+  const { exam_id } = req.params;
+  const [rows] = await pool.query(
+    `SELECT ea.student_id, ea.scheduled_at, s.name AS student_name, s.email AS student_email
+     FROM exam_assignments ea
+     JOIN students s ON s.id = ea.student_id
+     WHERE ea.exam_id = ?
+     ORDER BY ea.scheduled_at`,
+    [exam_id]
+  );
+  res.json(rows);
+}
+
+// Student-facing: exams assigned to them, with their unlock time.
 async function listAvailableExams(req, res) {
   const studentId = req.user.id;
   const [rows] = await pool.query(
-    `SELECT DISTINCT e.id, e.title, e.duration_minutes, e.total_marks, e.pass_marks
-     FROM exams e
-     JOIN courses c ON c.id = e.course_id
-     JOIN batches b ON b.course_id = c.id
-     JOIN student_batches sb ON sb.batch_id = b.id
-     WHERE sb.student_id = ? AND e.is_published = TRUE`,
+    `SELECT e.id, e.title, e.duration_minutes, e.total_marks, e.pass_marks, e.negative_marks, ea.scheduled_at
+     FROM exam_assignments ea
+     JOIN exams e ON e.id = ea.exam_id
+     WHERE ea.student_id = ? AND e.is_published = TRUE
+     ORDER BY ea.scheduled_at`,
     [studentId]
   );
   res.json(rows);
@@ -89,6 +200,16 @@ async function listAvailableExams(req, res) {
 async function startAttempt(req, res) {
   const studentId = req.user.id;
   const { exam_id } = req.params;
+
+  const [assignmentRows] = await pool.query(
+    'SELECT * FROM exam_assignments WHERE exam_id = ? AND student_id = ?',
+    [exam_id, studentId]
+  );
+  const assignment = assignmentRows[0];
+  if (!assignment) return res.status(403).json({ error: 'This exam is not assigned to you' });
+  if (new Date(assignment.scheduled_at) > new Date()) {
+    return res.status(403).json({ error: 'This exam has not started yet', scheduled_at: assignment.scheduled_at });
+  }
 
   const [existing] = await pool.query(
     "SELECT * FROM exam_attempts WHERE exam_id = ? AND student_id = ? AND status = 'in_progress'",
@@ -112,7 +233,7 @@ async function startAttempt(req, res) {
   res.json({ attemptId: attempt.id, exam: exam[0], questions });
 }
 
-// Submits answers, auto-grades, and stores the score.
+// Submits answers, auto-grades (applying negative marking if the exam has any), and stores the score.
 async function submitAttempt(req, res) {
   const studentId = req.user.id;
   const { attempt_id } = req.params;
@@ -125,15 +246,18 @@ async function submitAttempt(req, res) {
   const attempt = attemptRows[0];
   if (!attempt) return res.status(404).json({ error: 'No active attempt found' });
 
+  const [examRows] = await pool.query('SELECT negative_marks FROM exams WHERE id = ?', [attempt.exam_id]);
+  const negativeMarks = Number(examRows[0]?.negative_marks || 0);
+
   const [questions] = await pool.query('SELECT * FROM questions WHERE exam_id = ?', [attempt.exam_id]);
   const questionMap = new Map(questions.map((q) => [q.id, q]));
 
   let score = 0;
   for (const ans of answers || []) {
     const question = questionMap.get(ans.question_id);
-    if (!question) continue;
+    if (!question || !ans.selected_option) continue;
     const isCorrect = question.correct_option === ans.selected_option;
-    if (isCorrect) score += question.marks;
+    score += isCorrect ? question.marks : -negativeMarks;
 
     await pool.query(
       `INSERT INTO exam_answers (attempt_id, question_id, selected_option, is_correct)
@@ -142,6 +266,7 @@ async function submitAttempt(req, res) {
       [attempt_id, ans.question_id, ans.selected_option, isCorrect]
     );
   }
+  score = Math.max(0, Math.round(score * 100) / 100);
 
   const status = req.body.auto_submitted ? 'auto_submitted' : 'submitted';
   await pool.query(
@@ -166,6 +291,7 @@ async function myResults(req, res) {
 }
 
 module.exports = {
-  createExam, addQuestion, publishExam, listExams, listQuestions, deleteQuestion,
+  createExam, addQuestion, uploadQuestionsExcel, publishExam, listExams, listQuestions, deleteQuestion,
+  assignExam, unassignExam, listAssignments,
   listAvailableExams, startAttempt, submitAttempt, myResults,
 };

@@ -90,12 +90,27 @@ export default function StudentDashboard() {
       <section>
         <h2 className="font-semibold text-slate-900 mb-3">Available Exams</h2>
         <div className="bg-white border border-slate-200 rounded-lg divide-y divide-slate-100">
-          {exams.map((e) => (
-            <div key={e.id} className="px-4 py-3 flex justify-between items-center text-sm">
-              <span>{e.title} &middot; {e.duration_minutes} min &middot; {e.total_marks} marks</span>
-              <Link to={`/student/exams/${e.id}`} className="text-slate-900 underline">Start</Link>
-            </div>
-          ))}
+          {exams.map((e) => {
+            const isOpen = new Date(e.scheduled_at) <= new Date();
+            return (
+              <div key={e.id} className="px-4 py-3 flex justify-between items-center text-sm">
+                <div>
+                  <span>{e.title} &middot; {e.duration_minutes} min &middot; {e.total_marks} marks</span>
+                  {Number(e.negative_marks) > 0 && (
+                    <span className="text-xs text-rose-500 ml-2">(-{e.negative_marks} per wrong answer)</span>
+                  )}
+                  {!isOpen && (
+                    <p className="text-xs text-amber-600 mt-0.5">Opens {new Date(e.scheduled_at).toLocaleString()}</p>
+                  )}
+                </div>
+                {isOpen ? (
+                  <Link to={`/student/exams/${e.id}`} className="text-slate-900 underline shrink-0">Start</Link>
+                ) : (
+                  <span className="text-xs text-slate-400 shrink-0">Not started</span>
+                )}
+              </div>
+            );
+          })}
           {exams.length === 0 && <p className="px-4 py-4 text-sm text-slate-400">No exams available right now</p>}
         </div>
       </section>
