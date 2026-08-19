@@ -21,6 +21,8 @@ services:
         sync: false
       - key: DB_NAME
         sync: false
+      - key: DB_SSL_CA_PATH
+        value: ./aiven-ca.pem
       - key: JWT_SECRET
         generateValue: true
       - key: JWT_EXPIRES_IN
