@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import client from '../../api/client';
+import { fileUrl } from '../../utils/fileUrl';
 
 export default function TrainerMaterials() {
   const [batches, setBatches] = useState([]);
@@ -64,7 +65,7 @@ export default function TrainerMaterials() {
         {myMaterials.map((m) => (
           <div key={m.id} className="px-4 py-3 flex justify-between text-sm">
             <span>{m.title} <span className="text-slate-400">({m.course_title})</span></span>
-            <a href={m.file_url} target="_blank" rel="noreferrer" className="text-slate-900 underline">View</a>
+            <a href={fileUrl(m.file_url)} target="_blank" rel="noreferrer" className="text-slate-900 underline">View</a>
           </div>
         ))}
         {myMaterials.length === 0 && <p className="px-4 py-4 text-sm text-slate-400">No materials uploaded yet</p>}

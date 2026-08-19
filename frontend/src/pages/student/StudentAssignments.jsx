@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import client from '../../api/client';
+import { fileUrl } from '../../utils/fileUrl';
 
 export default function StudentAssignments() {
   const [assignments, setAssignments] = useState([]);
@@ -34,7 +35,7 @@ export default function StudentAssignments() {
 
             {a.submission_id ? (
               <div className="mt-3 text-sm">
-                <a href={a.submission_file_url} target="_blank" rel="noreferrer" className="text-slate-900 underline">
+                <a href={fileUrl(a.submission_file_url)} target="_blank" rel="noreferrer" className="text-slate-900 underline">
                   View my submission
                 </a>
                 {a.marks != null && <p className="text-green-600 mt-1">Marks: {a.marks}</p>}

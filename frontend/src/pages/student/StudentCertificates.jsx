@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import client from '../../api/client';
+import { fileUrl } from '../../utils/fileUrl';
 
 export default function StudentCertificates() {
   const [certificates, setCertificates] = useState([]);
@@ -15,7 +16,7 @@ export default function StudentCertificates() {
         {certificates.map((c) => (
           <div key={c.id} className="px-4 py-3 flex justify-between text-sm">
             <span>{c.course_title} &middot; {c.certificate_code}</span>
-            <a href={c.file_url} target="_blank" rel="noreferrer" className="text-slate-900 underline">Download</a>
+            <a href={fileUrl(c.file_url)} target="_blank" rel="noreferrer" className="text-slate-900 underline">Download</a>
           </div>
         ))}
         {certificates.length === 0 && <p className="px-4 py-4 text-sm text-slate-400">No certificates issued yet</p>}

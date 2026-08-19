@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import client from '../../api/client';
+import { fileUrl } from '../../utils/fileUrl';
 
 export default function AdminCertificates() {
   const [students, setStudents] = useState([]);
@@ -47,7 +48,7 @@ export default function AdminCertificates() {
       {issued && (
         <div className="mt-4 bg-green-50 border border-green-200 rounded-lg p-4 text-sm max-w-md">
           <p className="text-green-700">Certificate issued: <b>{issued.certificate_code}</b></p>
-          <a href={issued.file_url} target="_blank" rel="noreferrer" className="text-slate-900 underline">Download PDF</a>
+          <a href={fileUrl(issued.file_url)} target="_blank" rel="noreferrer" className="text-slate-900 underline">Download PDF</a>
         </div>
       )}
       {error && <p className="text-red-600 text-sm mt-3">{error}</p>}

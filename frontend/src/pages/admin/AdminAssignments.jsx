@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import client from '../../api/client';
+import { fileUrl } from '../../utils/fileUrl';
 
 export default function AdminAssignments() {
   const [batches, setBatches] = useState([]);
@@ -80,7 +81,7 @@ export default function AdminAssignments() {
                   <div className="mt-3 border-t border-slate-100 pt-3 space-y-2">
                     {submissions.map((s) => (
                       <div key={s.id} className="flex items-center justify-between text-sm">
-                        <a href={s.file_url} target="_blank" rel="noreferrer" className="text-slate-900 underline">{s.student_name}</a>
+                        <a href={fileUrl(s.file_url)} target="_blank" rel="noreferrer" className="text-slate-900 underline">{s.student_name}</a>
                         <div className="flex items-center gap-2">
                           <input
                             type="number"

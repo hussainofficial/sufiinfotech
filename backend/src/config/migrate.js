@@ -10,6 +10,9 @@ async function migrate() {
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     multipleStatements: true,
+    ssl: process.env.DB_SSL_CA_PATH
+      ? { ca: fs.readFileSync(process.env.DB_SSL_CA_PATH) }
+      : undefined,
   });
 
   const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
